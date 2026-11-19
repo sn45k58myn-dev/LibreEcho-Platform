@@ -298,7 +298,12 @@ reconcile_topology()
         stop_service agentd "$RUN_ROOT/libreecho/agent.sock" || return 1
         stop_service sttd "$RUN_ROOT/libreecho/stt.sock" || return 1
         start_daemon_service esphomed || return 1
+        # Starts idle: the device-local opt-in and per-call privacy/Assist
+        # handshake belong to intercomd, never to this topology reconciler.
+        start_daemon_service intercomd || return 1
     else
+        # End intercom ownership before its Assist suspension peer disappears.
+        stop_service intercomd "$RUN_ROOT/libreecho/intercom.sock" || return 1
         stop_service esphomed || return 1
     fi
     return 0

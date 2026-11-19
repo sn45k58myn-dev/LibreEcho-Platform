@@ -451,7 +451,7 @@ for binary in \
     libreecho-timerd libreecho-watchdogd \
     libreecho-audiod libreecho-micd libreecho-ledd libreecho-buttond \
     libreecho-radiod libreecho-btd \
-    libreecho-airplayd libreecho-esphomed libreecho-mdnsd
+    libreecho-airplayd libreecho-esphomed libreecho-intercomd libreecho-mdnsd
 do
     path="$UI_SOURCE/build/$binary"
     [[ -f "$path" && ! -L "$path" ]] || {
@@ -503,7 +503,7 @@ for binary in \
     libreecho-timerd libreecho-watchdogd \
     libreecho-audiod libreecho-micd libreecho-ledd libreecho-buttond \
     libreecho-radiod libreecho-btd \
-    libreecho-airplayd libreecho-esphomed \
+    libreecho-airplayd libreecho-esphomed libreecho-intercomd \
     libreecho-sttd-wyoming libreecho-ttsd-wyoming libreecho-mdnsd
 do
     install -m 0755 "$UI_SOURCE/build/$binary" "$OUTPUT/sbin/$binary"
@@ -523,13 +523,24 @@ for script in \
     libreecho-buttond.init libreecho-radiod.init libreecho-btd.init \
     libreecho-airplayd.init libreecho-ttsd.init \
     libreecho-waked.init libreecho-sttd.init libreecho-agentd.init \
-    libreecho-esphomed.init
+    libreecho-esphomed.init libreecho-intercomd.init
 do
     install -m 0755 "$UI_SOURCE/init/$script" "$OUTPUT/etc/init.d/$script"
 done
 
 # Guard the actual packaged scripts, not only the adapted source snapshot.
 python3 "$SCRIPT_DIR/ota_v3_health.py" --verify-init "$OUTPUT/etc/init.d"
+
+# Native intercom's browser UI and audio worklet are part of the shipped
+# control path. Never stage a partial interface that can enable a call but
+# cannot load its bounded PCM worklet.
+for asset in intercom-ui.js intercom-worklet.js; do
+    asset_path="$UI_SOURCE/web/js/$asset"
+    [[ -f "$asset_path" && ! -L "$asset_path" && -s "$asset_path" ]] || {
+        echo "ERROR: missing or empty intercom web asset: $asset" >&2
+        exit 1
+    }
+done
 
 cp -R "$UI_SOURCE/web/." "$OUTPUT/share/libreecho/web/"
 install -m 0600 "$UI_SOURCE/config/defaults.json" \

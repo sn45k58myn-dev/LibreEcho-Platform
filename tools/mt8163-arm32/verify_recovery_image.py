@@ -166,6 +166,7 @@ UI_BINARY_NAMES = {
     "usr/local/sbin/libreecho-btd",
     "usr/local/sbin/libreecho-airplayd",
     "usr/local/sbin/libreecho-esphomed",
+    "usr/local/sbin/libreecho-intercomd",
     "usr/local/sbin/libreecho-sttd-wyoming",
     "usr/local/sbin/libreecho-ttsd-wyoming",
     "usr/local/sbin/libreecho-mdnsd",
@@ -189,8 +190,13 @@ UI_INIT_NAMES = {
     "etc/init.d/libreecho-sttd.init",
     "etc/init.d/libreecho-agentd.init",
     "etc/init.d/libreecho-esphomed.init",
+    "etc/init.d/libreecho-intercomd.init",
 }
-UI_FIXED_NAMES = UI_BINARY_NAMES | UI_INIT_NAMES | {
+UI_INTERCOM_WEB_NAMES = {
+    "usr/local/share/libreecho/web/js/intercom-ui.js",
+    "usr/local/share/libreecho/web/js/intercom-worklet.js",
+}
+UI_FIXED_NAMES = UI_BINARY_NAMES | UI_INIT_NAMES | UI_INTERCOM_WEB_NAMES | {
     "etc/libreecho/web-config.json",
     "etc/libreecho/airplay2.conf",
     "etc/libreecho/ntp.conf",
@@ -836,6 +842,9 @@ def validate_ui(entries: dict[str, Entry], manifest: dict[str, object],
                 expected_commit: str | None,
                 expected_diff_sha256: str | None) -> bool:
     for name, entry in entries.items():
+        if name in {"etc/libreecho/web-config.json.intercom",
+                    "data/libreecho/config/web-config.json.intercom"}:
+            fail(f"forbidden device-local intercom permission file: {name}")
         if ((name.endswith(".service") and b"_wyoming._tcp" in entry.data) or
                 name.startswith("usr/local/sbin/libreecho-wyomingd") or
                 name.startswith("etc/init.d/libreecho-wyomingd") or
@@ -920,6 +929,8 @@ def validate_ui(entries: dict[str, Entry], manifest: dict[str, object],
             fail("UI users file is empty")
         if name.startswith("usr/local/share/libreecho/sounds/") and not member.data:
             fail(f"UI action sound is empty: {name}")
+        if name in UI_INTERCOM_WEB_NAMES and not member.data:
+            fail(f"UI intercom web asset is empty: {name}")
         if name in UI_BINARY_NAMES:
             if name in {
                     "usr/local/sbin/libreecho-sttd-wyoming",

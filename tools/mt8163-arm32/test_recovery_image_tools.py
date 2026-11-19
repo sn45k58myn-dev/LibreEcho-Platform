@@ -2477,6 +2477,7 @@ class PolicyTests(unittest.TestCase):
                 "agentd": ("assistant", "agent.sock"),
                 "wyomingd": (None, None),
                 "esphomed": (None, None),
+                "intercomd": (None, None),
             }
             proc_lines = []
             socket_paths = {}
@@ -2556,6 +2557,7 @@ class PolicyTests(unittest.TestCase):
                 actions.read_text().splitlines(),
                 [
                     "libreecho-wyomingd.init:stop",
+                    "libreecho-intercomd.init:stop",
                     "libreecho-esphomed.init:stop",
                     "libreecho-waked.init:start", "libreecho-sttd.init:start",
                     "libreecho-airplayd.init:start", "libreecho-ttsd.init:start",
@@ -2607,6 +2609,7 @@ class PolicyTests(unittest.TestCase):
                 disabled_actions,
                 [
                     "libreecho-wyomingd.init:stop",
+                    "libreecho-intercomd.init:stop",
                     "libreecho-esphomed.init:stop",
                     "libreecho-waked.init:start", "libreecho-sttd.init:start",
                     "libreecho-airplayd.init:start", "libreecho-ttsd.init:start",
@@ -2682,6 +2685,7 @@ class PolicyTests(unittest.TestCase):
                     "libreecho-agentd.init:stop",
                     "libreecho-sttd.init:stop",
                     "libreecho-esphomed.init:start",
+                    "libreecho-intercomd.init:start",
                     "libreecho-waked.init:start",
                     "libreecho-airplayd.init:start",
                     "libreecho-ttsd.init:start",
@@ -2696,6 +2700,17 @@ class PolicyTests(unittest.TestCase):
                 (var_run / "libreecho-airplayd.pid").read_text(),
                 f"{os.getpid()}\n",
             )
+
+            intercom_script = init / "libreecho-intercomd.init"
+            intercom_source = intercom_script.read_text()
+            intercom_script.write_text(intercom_source.replace(
+                'start) printf', 'start) exit 8; printf'))
+            actions.write_text("")
+            failed_intercom = subprocess.run(["sh", str(helper)], env=env, timeout=10)
+            self.assertNotEqual(failed_intercom.returncode, 0)
+            self.assertIn("feature-reconcile-service-start-failed:intercomd",
+                          (root / "reconcile.log").read_text())
+            intercom_script.write_text(intercom_source)
 
             actions.write_text("")
             (data / "libreecho/config/web-config.json").write_text(
@@ -2714,6 +2729,7 @@ class PolicyTests(unittest.TestCase):
                     "libreecho-agentd.init:stop",
                     "libreecho-sttd.init:stop",
                     "libreecho-esphomed.init:start",
+                    "libreecho-intercomd.init:start",
                     "libreecho-waked.init:start",
                     "libreecho-airplayd.init:start",
                     "libreecho-ttsd.init:start",
@@ -2739,6 +2755,13 @@ class PolicyTests(unittest.TestCase):
             actions.write_text("")
             saved_custom = '{"integrations":4,"voice_pipeline_mode":"custom"}\n'
             (data / "libreecho/config/web-config.json").write_text(saved_custom)
+            intercom_script.write_text(intercom_source.replace(
+                'stop) printf', 'stop) exit 8; printf'))
+            failed_stop = subprocess.run(["sh", str(helper)], env=env, timeout=10)
+            self.assertNotEqual(failed_stop.returncode, 0)
+            self.assertNotIn("libreecho-esphomed.init:stop", actions.read_text().splitlines())
+            intercom_script.write_text(intercom_source)
+            actions.write_text("")
             for service in ("sttd", "ttsd", "agentd"):
                 if socket_paths[service].exists():
                     continue  # ttsd stays up (and bound) in Home Assistant mode
@@ -2749,11 +2772,13 @@ class PolicyTests(unittest.TestCase):
                 sockets.append(listener)
             subprocess.run(["sh", str(helper)], env=env, check=True, timeout=10)
             self.assertEqual(actions.read_text().splitlines(), [
+                "libreecho-intercomd.init:stop",
                 "libreecho-esphomed.init:stop", "libreecho-waked.init:start",
                 "libreecho-sttd.init:start", "libreecho-airplayd.init:start",
                 "libreecho-ttsd.init:start", "libreecho-agentd.init:start"])
             self.assertEqual((data / "libreecho/config/web-config.json").read_text(), saved_custom)
             self.assertFalse((states / "esphomed").exists())
+            self.assertFalse((states / "intercomd").exists())
             (data / "libreecho/config/web-config.json").write_text('{"integrations":21}\n')
             (etc / "libreecho/feature-policy").write_text("redistributable\n")
             unsupported_ha = subprocess.run(["sh", str(helper)], env=env)
@@ -2762,6 +2787,22 @@ class PolicyTests(unittest.TestCase):
                 "feature-reconcile-home-assistant-requires-wakeword",
                 (root / "reconcile.log").read_text(),
             )
+
+            # Intercom permission is device-local and defaults off: merely
+            # starting an idle HA companion must not create its opt-in sidecar.
+            sidecar = data / "libreecho/config/web-config.json.intercom"
+            self.assertFalse(sidecar.exists())
+            for profile, policy in (("diagnostic", "community-noncommercial"),
+                                    ("production", "exclude")):
+                (etc / "libreecho/service-profile").write_text(profile + "\n")
+                (etc / "libreecho/feature-policy").write_text(policy + "\n")
+                actions.write_text("")
+                skipped = subprocess.run(["sh", str(helper)], env=env, timeout=10)
+                self.assertEqual(skipped.returncode, 0)
+                self.assertEqual(actions.read_text(), "")
+                self.assertFalse(sidecar.exists())
+            (etc / "libreecho/service-profile").write_text("production\n")
+            (etc / "libreecho/feature-policy").write_text("community-noncommercial\n")
 
             invalid_env = env.copy()
             invalid_env["FEATURE_RECONCILE_READY_TIMEOUT_SECONDS"] = "0"
@@ -3021,7 +3062,7 @@ ota_health_services_ready
         self.assertNotIn('services="$services airplayd radiod ttsd agentd web"', service_start)
         # Home Assistant mode keeps ttsd: reminders and the announce action
         # speak through it. Only agentd and sttd are local-voice-only.
-        self.assertIn('services="$services airplayd radiod ttsd esphomed web"', service_start)
+        self.assertIn('services="$services airplayd radiod ttsd esphomed intercomd web"', service_start)
         self.assertNotIn('services="$services airplayd radiod esphomed web"', service_start)
         self.assertIn('stop_owners="$stop_owners agentd sttd"\n', init_script)
         self.assertNotIn('stop_owners="$stop_owners agentd sttd ttsd"', init_script)
@@ -3442,8 +3483,8 @@ start_feature_service_if_enabled
             'services="logd networkd timed audiod', init_source
         )
 
-    def test_timer_daemon_is_packaged_in_every_layer(self) -> None:
-        """Issue #162: the timer daemon must survive every packaging layer.
+    def test_timer_and_intercom_daemons_are_packaged_in_every_layer(self) -> None:
+        """Timers and native intercom must survive every packaging layer.
 
         LibreEcho-UI builds libreecho-timerd and installs
         etc/init.d/libreecho-timerd.init, but Platform dropped both: the bundle
@@ -3467,12 +3508,19 @@ start_feature_service_if_enabled
 
         # The static ARM32 loop rejects a dynamic or non-ARM binary, so a
         # daemon that is installed but never verified would ship unvalidated.
+        self.assertIn("libreecho-intercomd", shell_for_items(verify_block))
+        self.assertIn("libreecho-intercomd", shell_for_items(install_block))
+        self.assertIn("libreecho-intercomd.init", shell_for_items(script_blocks[0]))
         self.assertIn("libreecho-timerd", shell_for_items(verify_block))
         self.assertIn("libreecho-timerd", shell_for_items(install_block))
         self.assertIn("libreecho-timerd.init", shell_for_items(script_blocks[0]))
 
         builder_binaries = python_string_list(builder_source, "    for binary in (\n")
         builder_scripts = python_string_list(builder_source, "    for script in (\n")
+        self.assertIn("libreecho-intercomd", builder_binaries)
+        self.assertIn("libreecho-intercomd.init", builder_scripts)
+        self.assertIn("usr/local/sbin/libreecho-intercomd", verifier.UI_BINARY_NAMES)
+        self.assertIn("etc/init.d/libreecho-intercomd.init", verifier.UI_INIT_NAMES)
         self.assertIn("libreecho-timerd", builder_binaries)
         self.assertIn("libreecho-timerd.init", builder_scripts)
 
@@ -4844,7 +4892,7 @@ class EsphomeShippingTests(unittest.TestCase):
     def test_shipping_inventory_and_noise_link_contract(self) -> None:
         bundle = (TOOLS_DIR / "ui/build_ui_bundle.sh").read_text()
         image = (TOOLS_DIR / "build_recovery_image.py").read_text()
-        for name in ("libreecho-esphomed", "libreecho-watchdogd"):
+        for name in ("libreecho-esphomed", "libreecho-watchdogd", "libreecho-intercomd"):
             self.assertIn(name, bundle)
             self.assertIn(name, image)
             self.assertIn(f"usr/local/sbin/{name}", verifier.UI_BINARY_NAMES)
@@ -4858,6 +4906,32 @@ class EsphomeShippingTests(unittest.TestCase):
         for macro in ("MBEDTLS_ECDH_C", "MBEDTLS_ECP_DP_CURVE25519_ENABLED",
                       "MBEDTLS_CHACHAPOLY_C", "MBEDTLS_SHA256_C", "MBEDTLS_MD_C"):
             self.assertIn(macro, (TOOLS_DIR / "ui/verify_ui_tls.sh").read_text())
+
+    def test_intercom_web_asset_guard_rejects_partial_or_symlinked_sources(self) -> None:
+        source = (TOOLS_DIR / "ui/build_ui_bundle.sh").read_text()
+        start = source.index("# Native intercom's browser UI")
+        end = source.index('cp -R "$UI_SOURCE/web/."', start)
+        guard = source[start:end]
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            assets = root / "web/js"
+            assets.mkdir(parents=True)
+            names = ("intercom-ui.js", "intercom-worklet.js")
+            for variant in ("complete", "missing", "empty", "symlink"):
+                for name in names:
+                    (assets / name).unlink(missing_ok=True)
+                    (assets / name).write_text("fixture javascript\n")
+                if variant == "missing":
+                    (assets / names[1]).unlink()
+                elif variant == "empty":
+                    (assets / names[1]).write_text("")
+                elif variant == "symlink":
+                    (assets / names[1]).unlink()
+                    (assets / names[1]).symlink_to(assets / names[0])
+                result = subprocess.run(["bash", "-c", "set -euo pipefail\n" + guard],
+                    env={**os.environ, "UI_SOURCE": str(root)},
+                    text=True, capture_output=True, timeout=10)
+                self.assertEqual(result.returncode == 0, variant == "complete", result.stderr)
 
     @staticmethod
     def fixture_elf(dynamic: bool = False) -> bytes:
@@ -4922,12 +4996,44 @@ class EsphomeShippingTests(unittest.TestCase):
             self.assertTrue(verifier.validate_ui(entries, manifest, digest, "a"*40, "b"*64))
             for missing in ("usr/local/sbin/libreecho-esphomed",
                             "etc/init.d/libreecho-esphomed.init",
+                            "usr/local/sbin/libreecho-intercomd",
+                            "etc/init.d/libreecho-intercomd.init",
+                            "usr/local/share/libreecho/web/js/intercom-ui.js",
+                            "usr/local/share/libreecho/web/js/intercom-worklet.js",
                             "usr/local/sbin/libreecho-watchdogd",
                             "usr/local/sbin/libreecho-sttd-wyoming",
                             "etc/libreecho/avahi-services/esphome.service"):
                 with self.subTest(missing=missing), self.assertRaises(SystemExit):
                     verifier.validate_ui({k:v for k,v in entries.items() if k != missing},
                                          manifest, digest, "a"*40, "b"*64)
+            # An empty asset with a consistent file record and UI manifest
+            # must still fail: hashing a partial interface is not closure.
+            import copy
+            manifest_name = "usr/local/share/libreecho/ui-manifest.txt"
+            for empty in ("usr/local/share/libreecho/web/js/intercom-ui.js",
+                          "usr/local/share/libreecho/web/js/intercom-worklet.js"):
+                with self.subTest(empty=empty):
+                    blank_entries = dict(entries)
+                    blank_entries[empty] = verifier.Entry(
+                        empty, entries[empty].mode, 0, 0, 0, b"")
+                    old_hash = hashlib.sha256(entries[empty].data).hexdigest()
+                    empty_hash = hashlib.sha256(b"").hexdigest()
+                    relative = empty.removeprefix("usr/local/")
+                    raw = entries[manifest_name].data.replace(
+                        f"file={relative} sha256={old_hash}".encode(),
+                        f"file={relative} sha256={empty_hash}".encode())
+                    blank_entries[manifest_name] = verifier.Entry(
+                        manifest_name, entries[manifest_name].mode, 0, 0, 0, raw)
+                    blank_manifest = copy.deepcopy(manifest)
+                    for name in (empty, manifest_name):
+                        record = blank_manifest["ui"]["files"][name]
+                        data = blank_entries[name].data
+                        record.update(sha256=hashlib.sha256(data).hexdigest(), size=len(data))
+                    blank_digest = hashlib.sha256(raw).hexdigest()
+                    blank_manifest["ui"]["manifest_sha256"] = blank_digest
+                    with self.assertRaisesRegex(SystemExit, "intercom web asset is empty"):
+                        verifier.validate_ui(blank_entries, blank_manifest,
+                                             blank_digest, "a"*40, "b"*64)
             wrong = "usr/local/sbin/libreecho-esphomed"
             original = entries[wrong]
             entries[wrong] = verifier.Entry(wrong, stat.S_IFREG | 0o644, 0, 0, 0, original.data)
@@ -4935,11 +5041,44 @@ class EsphomeShippingTests(unittest.TestCase):
                 verifier.validate_ui(entries, manifest, digest, "a"*40, "b"*64)
             entries[wrong] = original
             for name in ("usr/local/sbin/libreecho-wyomingd", "etc/init.d/libreecho-wyomingd.init",
-                         "etc/libreecho/avahi-services/wyoming.service", "etc/libreecho/esphome-key"):
+                         "etc/libreecho/avahi-services/wyoming.service", "etc/libreecho/esphome-key",
+                         "etc/libreecho/web-config.json.intercom"):
                 with self.subTest(stray=name), self.assertRaises(SystemExit):
                     verifier.validate_ui({**entries, name: verifier.Entry(
                         name, stat.S_IFREG | 0o755, 0, 0, 0, b"forbidden")},
                         manifest, digest, "a"*40, "b"*64)
+
+    def test_builder_refuses_missing_or_empty_intercom_assets(self) -> None:
+        from unittest import mock
+        names = ("share/libreecho/web/js/intercom-ui.js",
+                 "share/libreecho/web/js/intercom-worklet.js")
+        for invalid in names:
+            for variant in ("missing", "empty"):
+                with self.subTest(asset=invalid, variant=variant), tempfile.TemporaryDirectory() as td:
+                    root = Path(td)
+                    bundle, source = root / "bundle", root / "source"
+                    source.mkdir()
+                    lines = ["schema=1", "source_commit=" + "a"*40,
+                             "source_diff_sha256=" + "b"*64]
+                    all_names = (name.removeprefix("usr/local/") for name in
+                                 verifier.UI_FIXED_NAMES - {"usr/local/share/libreecho/ui-manifest.txt"})
+                    for name in sorted(all_names):
+                        if name == invalid and variant == "missing":
+                            continue
+                        content = (self.fixture_elf(name.endswith(("sttd-wyoming", "ttsd-wyoming")))
+                                   if "usr/local/" + name in verifier.UI_BINARY_NAMES else b"fixture\n")
+                        if name == invalid:
+                            content = b""
+                        path = bundle / name
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_bytes(content)
+                        lines.append(f"file={name} sha256={hashlib.sha256(content).hexdigest()}")
+                    manifest = bundle / "share/libreecho/ui-manifest.txt"
+                    manifest.write_text("\n".join(lines) + "\n")
+                    with mock.patch.object(builder, "validate_ui_startup_contract"), \
+                         mock.patch.object(builder, "require_elf_contract", return_value={}), \
+                         self.assertRaisesRegex(SystemExit, "intercom web asset"):
+                        builder.add_ui_bundle(root / "stage", bundle, source, "a"*40, "b"*64, {})
 
     def test_reference_discovery_template_rejects_private_identity(self) -> None:
         script = (TOOLS_DIR / "ui/build_ui_bundle.sh").read_text()
@@ -4976,7 +5115,7 @@ class EsphomeShippingTests(unittest.TestCase):
     def test_builder_refuses_extra_manifested_satellite_or_secret(self) -> None:
         for extra in ("sbin/libreecho-wyomingd", "etc/init.d/libreecho-wyomingd.init",
                       "etc/libreecho/avahi-services/wyoming.service",
-                      "etc/libreecho/esphome-key", "sbin/rogue"):
+                      "etc/libreecho/esphome-key", "etc/libreecho/web-config.json.intercom", "sbin/rogue"):
             with self.subTest(extra=extra), tempfile.TemporaryDirectory() as td:
                 root = Path(td)
                 bundle = root / "bundle"
@@ -5006,7 +5145,8 @@ class EsphomeShippingTests(unittest.TestCase):
                      "etc/init.d/libreecho-wyomingd.init",
                      "etc/libreecho/avahi-services/wyoming.service",
                      "usr/local/sbin/libreecho-esphomed.old",
-                     "etc/libreecho/esphome-key"):
+                     "etc/libreecho/esphome-key", "etc/libreecho/web-config.json.intercom",
+                     "data/libreecho/config/web-config.json.intercom"):
             with self.subTest(name=name), self.assertRaises(SystemExit):
                 entries = {name: verifier.Entry(name, stat.S_IFREG | 0o755, 0, 0, 0, b"fixture")}
                 verifier.validate_ui(entries, {"ui": {"enabled": False}}, None, None, None)

@@ -1418,7 +1418,7 @@ def add_ui_bundle(stage: Path, bundle: Path, source: Path,
         "libreecho-timed", "libreecho-timerd", "libreecho-watchdogd",
         "libreecho-audiod", "libreecho-micd", "libreecho-ledd", "libreecho-buttond",
         "libreecho-radiod", "libreecho-btd", "libreecho-airplayd",
-        "libreecho-esphomed", "libreecho-mdnsd",
+        "libreecho-esphomed", "libreecho-intercomd", "libreecho-mdnsd",
         "libreecho-sttd-wyoming", "libreecho-ttsd-wyoming",
     }
     allowed_inits = (allowed_binaries - {"libreecho-mdnsd", "libreecho-sttd-wyoming",
@@ -1437,6 +1437,13 @@ def add_ui_bundle(stage: Path, bundle: Path, source: Path,
     for relative in bundled_files:
         if relative not in allowed_fixed and not relative.startswith("share/libreecho/web/"):
             raise SystemExit(f"ERROR: UI bundle has unexpected/forbidden file: {relative}")
+    for asset in ("intercom-ui.js", "intercom-worklet.js"):
+        relative = f"share/libreecho/web/js/{asset}"
+        if relative not in bundled_files:
+            raise SystemExit(f"ERROR: UI bundle is missing intercom web asset: {asset}")
+        asset_path = pinned_source(bundle, relative, f"intercom web asset {asset}")
+        if not read(asset_path):
+            raise SystemExit(f"ERROR: UI bundle intercom web asset is empty: {asset}")
     validate_ui_startup_contract(bundle)
 
     files: dict[str, object] = {}
@@ -1475,7 +1482,7 @@ def add_ui_bundle(stage: Path, bundle: Path, source: Path,
         "libreecho-timed", "libreecho-timerd", "libreecho-watchdogd",
         "libreecho-audiod", "libreecho-micd",
         "libreecho-ledd", "libreecho-buttond", "libreecho-radiod", "libreecho-btd",
-        "libreecho-airplayd", "libreecho-esphomed",
+        "libreecho-airplayd", "libreecho-esphomed", "libreecho-intercomd",
         "libreecho-sttd-wyoming", "libreecho-ttsd-wyoming",
         # The shared discovery supervisor: the 0.14 mDNS re-arch moved
         # responder ownership here, and without the binary the init falls back
@@ -1492,7 +1499,7 @@ def add_ui_bundle(stage: Path, bundle: Path, source: Path,
         "libreecho-micd.init", "libreecho-ledd.init", "libreecho-buttond.init",
         "libreecho-radiod.init", "libreecho-btd.init",
         "libreecho-airplayd.init", "libreecho-ttsd.init", "libreecho-waked.init",
-        "libreecho-sttd.init", "libreecho-agentd.init", "libreecho-esphomed.init",
+        "libreecho-sttd.init", "libreecho-agentd.init", "libreecho-esphomed.init", "libreecho-intercomd.init",
     ):
         copy_file(f"etc/init.d/{script}", f"etc/init.d/{script}", 0o755)
     copy_file("etc/libreecho/web-config.json", "etc/libreecho/web-config.json", 0o600)
