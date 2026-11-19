@@ -1,161 +1,92 @@
-# LibreEcho Platform
+# LibreEcho-Platform — independent experimental community fork
 
-`LibreEcho-Platform` is the public ARM32 product-tooling repository for the
-supported LibreEcho target: the Amazon Echo Gen 2 / MT8163 Radar Puffin
-platform. It is not the current Linux kernel source tree and it is not a
-complete product release by itself.
+**Built on [LibreEcho](https://github.com/aslater3/LibreEcho), created by
+Andy Slater ([aslater3](https://github.com/aslater3)) and the LibreEcho contributors.**
+Full credit for the original project, architecture, hardware research and existing
+features belongs to the original authors. Visit [libreecho.org](https://libreecho.org/)
+and read [ATTRIBUTION.md](ATTRIBUTION.md). Original licences and copyright notices
+remain unchanged.
 
-## What this repository owns
+This is an independent fork with **AI-assisted additions**. It is not an official
+LibreEcho release and is not endorsed by upstream or Amazon. Read
+[AI_DISCLOSURE.md](AI_DISCLOSURE.md) and the full [DISCLAIMER.md](DISCLAIMER.md).
+**There is no promised repair, recovery, unbricking, replacement or support service.**
 
-This repository contains the public, release-relative pieces that make the
-platform image reproducible and reviewable:
+## Source and hardware status
 
-- ARM32 recovery-image and boot-envelope tooling;
-- initramfs startup, update, rollback, and boot-control contracts;
-- service and feature-payload packaging for the public product profiles;
-- OTA bundle creation, signature verification, and release-source checks;
-- owner-local vendor-firmware import validation;
-- source locks, third-party notices, artifact verifiers, and focused host tests;
-- historical compatibility material retained while the platform boundary moves.
+The frozen personal `0.15.0` candidate for the full-size Echo 2nd Generation
+(`radar_puffin`) passed local source tests, cross-compilation, image/signature
+verification and complete installer preparation. It remains
+**`PREPARED_NOT_FLASHED`: no physical boot, audio, microphone or update acceptance.**
+The candidate's original build input for this component is `99197eff816d2696cc8760a4a1cd86cc4fe216b0`.
+Publication documentation is added above those frozen inputs; an existing binary
+is not relabelled as a build of the publication commit.
 
-The public source is deliberately separate from private release orchestration.
-Private build roots, signing inputs, deployment evidence, and owner-local
-artifacts are not part of this repository and must never be copied into it.
+Echo Dot 2 support is inherited from upstream and has not been qualified in this
+fork. **Echo 3, Echo Studio and additional boards are research targets only:
+unsupported, with no compatible image or enabled port provided here.**
 
-## Repository boundaries
+## Four-repository layout
 
-The current ownership map is:
+| Repository | Responsibility |
+| --- | --- |
+| [LibreEcho](https://github.com/sn45k58myn-dev/LibreEcho) | Project home, coordination, build/release tooling and documentation. |
+| [LibreEcho-UI](https://github.com/sn45k58myn-dev/LibreEcho-UI) | Web interface, APIs and device/voice services. |
+| [LibreEcho-Platform](https://github.com/sn45k58myn-dev/LibreEcho-Platform) | Initramfs, image and update tooling, audio and feature packaging. |
+| [LibreEcho-Linux](https://github.com/sn45k58myn-dev/LibreEcho-Linux) | Kernel, device trees and drivers. |
 
-| Area | Repository | Scope |
-| --- | --- | --- |
-| Platform tooling and ARM32 image contracts | `LibreEcho-Platform` | This repository: initramfs, payload packaging, OTA, recovery tooling |
-| Current kernel and device tree | [`LibreEcho-Linux`](https://github.com/aslater3/LibreEcho-Linux) | Linux 6.1 on upstream stable history: drivers, DT/DTS, kernel configuration, and kernel provenance. Replaces the archived [`LibreEcho-Linux-6.1`](https://github.com/aslater3/LibreEcho-Linux-6.1), the kernel source for releases up to 0.14.4 |
-| UI and service daemons | [`LibreEcho-UI`](https://github.com/aslater3/LibreEcho-UI) | Web UI, APIs, product daemons, and UI-side runtime behavior |
-| Product coordination and release documentation | [`LibreEcho`](https://github.com/aslater3/LibreEcho) | Product status, release notes, public issue tracking, and cross-repository policy |
-| Public installation and operator documentation | [`LibreEcho-Docs`](https://github.com/aslater3/LibreEcho-Docs) | Installation, recovery, supported hardware, privacy, and release guidance |
-| Private release orchestration | `LibreEcho-Build` | Maintainer-only pipeline inputs and deployment/signing coordination; not public |
+## Hardware roadmap
 
-The current Linux ownership boundary is **Linux 6.1**. The historical Linux 3.18
-source retained in this repository is compatibility material only; it is not the
-source of truth for current kernel, device-tree, or driver changes. Kernel fixes
-belong in `LibreEcho-Linux`, while initramfs and product-tooling fixes belong
-here.
+Start at the [project home](https://github.com/sn45k58myn-dev/LibreEcho),
+[hardware roadmap](https://github.com/sn45k58myn-dev/LibreEcho/blob/docs/community-publication/docs/community/ROADMAP.md),
+[board proposal template](https://github.com/sn45k58myn-dev/LibreEcho/blob/docs/community-publication/docs/community/BOARD_PROPOSAL.md), and
+[build status](https://github.com/sn45k58myn-dev/LibreEcho/blob/docs/community-publication/docs/community/BUILD_STATUS.md).
+Use [CONTRIBUTING.community.md](CONTRIBUTING.community.md) for fork-specific routing
+and preserve the existing source, test, licence and boot-chain rules.
 
-## Supported target and non-goals
+## Build, installation and automation boundaries
 
-The maintained target is the supported Echo Gen 2 MT8163 Radar Puffin hardware
-revision described by the release contract. The image profile, artifact
-inventory, partition geometry, and release channel are verified rather than
-inferred from arbitrary device paths.
+This publication contains source and documentation. No stable firmware release or
+working Echo 3/Studio port is announced. The locally prepared personal image uses
+a personal OTA public key and does not accept official LibreEcho OTA signatures;
+its private signing seed is not published.
 
-This repository does **not** claim to support:
+Inherited build/release workflows and download wrappers still contain upstream
+repository defaults. They must not be presented as building or installing this
+fork. Fork GitHub Actions are to remain disabled until checkout identities,
+permissions, signing and release destinations have been adapted and reviewed.
+No remote CI success is claimed by this source publication.
 
-- other Echo generations or unverified hardware revisions;
-- arbitrary partition layouts, boot chains, or vendor firmware;
-- a generic Linux distribution or a general-purpose recovery environment;
-- private build/deployment roots, mutable `CURRENT` pointers, or maintainer-only
-  evidence directories;
-- redistribution of connectivity firmware, calibration data, boot-chain data,
-  credentials, or device identity material;
-- hardware validation merely because a host build or static verifier passes.
+The original component documentation is preserved verbatim in
+[README.upstream.md](README.upstream.md). It describes an upstream snapshot;
+upstream badges, support claims, releases and install commands in that document
+are **not evidence or instructions for this fork's modified candidate**.
+Never bypass target, partition, boot-chain or signature checks to try a new board.
 
-## Owner-local firmware boundary
+## Known limitation
 
-Four connectivity-firmware inputs are imported only from the owner's device by
-the reviewed vendor-import path. The importer checks the expected source paths,
-file types, sizes, hashes, and target inventory before staging them. These files,
-calibration data, vendor boot-chain material, MAC addresses, and identity data
-remain local to the owner's device.
+The established-playback radio regression passes. A separate pre-existing race
+can stop a just-starting radio child before its parent-death guard is armed when
+pause happens before the first PCM. This fork does not claim that race is fixed.
+See the project build-status page for the evidence limits and next gates.
 
-They must not be uploaded, cached in CI, committed to source control, included in
-public release assets, or recorded in logs/evidence. A public build must fail
-closed when required owner-local inputs are missing or do not match the reviewed
-contract. See [`tools/mt8163-arm32/initramfs/vendor-assets/README.md`](tools/mt8163-arm32/initramfs/vendor-assets/README.md)
-and [`docs/repository-boundary.md`](docs/repository-boundary.md).
+## Exact tested source history
 
-## Safe host checks
+The [source-history bundle](docs/community/history/tested-source.bundle) preserves
+the original local source commits and authorship on top of the upstream baseline.
+It contains Git source objects, not device firmware or signing secrets. This also
+keeps the frozen build ledger usable when GitHub's API creates a publication
+commit with a new commit ID but the same checked source files.
 
-These commands exercise public source contracts and do not flash hardware,
-write device partitions, or require private deployment roots:
-
-```sh
-python tools/mt8163-arm32/test_recovery_image_tools.py
-python tools/mt8163-arm32/test_source_offer_tools.py
-python -m py_compile \
-  tools/mt8163-arm32/build_recovery_image.py \
-  tools/mt8163-arm32/verify_recovery_image.py \
-  tools/mt8163-arm32/ota/make_ota_bundle.py
-```
-
-For pipeline contract tests, set `LIBREECHO_PIPELINE_ROOT` to a reviewed,
-release-relative pipeline checkout. Do not substitute a private path in source,
-documentation, or a UI-controlled value. Shell syntax checks can be run with
-`bash -n` over the tracked `tools/mt8163-arm32` scripts.
-
-### Final setup feature reconciliation
-
-After the final setup process has atomically committed setup settings and Wi-Fi
-configuration, it must invoke the installed Platform helper synchronously:
+On a Linux filesystem, after cloning this fork and making the upstream prerequisite
+available, verify and fetch the bundle without flashing or changing device state:
 
 ```sh
-/usr/local/sbin/libreecho-reconcile-features
+git bundle verify docs/community/history/tested-source.bundle
+git fetch docs/community/history/tested-source.bundle HEAD
+git rev-parse FETCH_HEAD
 ```
 
-The helper rereads the immutable image `service-profile` and `feature-policy`,
-selects the topology from the persisted integration settings, starts each
-selected payload-backed service in dependency-safe order, and returns non-zero
-when a payload is still staged or a service cannot become ready. The setup
-process should keep setup incomplete and retry/report the failure in that case.
-A successful helper run does not create `startup-ready` itself; the already
-running WebUI readiness worker observes the healthy service graph and creates
-`/run/libreecho/startup-ready`.
-
-A host check is not hardware acceptance. A complete image still requires the
-paired current kernel, UI bundle, private build orchestration, independent image
-verification, and separately recorded runtime/hardware evidence.
-
-## Release, licensing, and source closure
-
-The signed OTA contract and release workflow are documented in
-[`tools/mt8163-arm32/ota/README.md`](tools/mt8163-arm32/ota/README.md). Component
-licenses and notices are kept beside the component or in
-[`tools/mt8163-arm32/third-party-licenses/`](tools/mt8163-arm32/third-party-licenses/).
-The public source/component inventory is embedded in the image license closure;
-product-level release and corresponding-source records belong in
-[`LibreEcho`](https://github.com/aslater3/LibreEcho) and
-[`LibreEcho-Docs`](https://github.com/aslater3/LibreEcho-Docs).
-
-A release must be reproducible from its pinned public source and explicitly
-identified owner-local inputs. Signing keys, private repository tokens,
-credentials, deployment pointers, and unpublished build/evidence artifacts are
-never required in this repository or in a public issue report.
-
-## Historical source boundary
-
-The original upstream Linux 3.x root release notes are preserved at
-[`docs/historical/upstream-linux-3x-README`](docs/historical/upstream-linux-3x-README)
-for provenance. Historical combined candidate trees and stale paths are obsolete;
-do not use them as current build or installation instructions. The current
-boundary summary is [`docs/repository-boundary.md`](docs/repository-boundary.md).
-
-## Contributing and filing issues
-
-Before opening an issue, run the relevant safe host checks and include the exact
-public commit, command, sanitized output, target/release profile, and whether the
-observation is source-only, image/build, or live hardware. Never include
-passwords, private keys, Wi-Fi credentials, serials, MAC addresses, owner-local
-firmware, private filesystem paths, or unpublished release artifacts.
-
-- Platform tooling, initramfs, OTA, and recovery contracts: file the issue here.
-- Kernel, DT/DTS, driver, and kernel-config behavior: use
-  [`LibreEcho-Linux`](https://github.com/aslater3/LibreEcho-Linux).
-- UI, API, and service-daemon behavior: use
-  [`LibreEcho-UI`](https://github.com/aslater3/LibreEcho-UI).
-- Product release gates and cross-repository policy: use
-  [`LibreEcho`](https://github.com/aslater3/LibreEcho).
-- Installation and operator-documentation defects: use
-  [`LibreEcho-Docs`](https://github.com/aslater3/LibreEcho-Docs).
-
-Destructive operations such as flashing, rebooting, partition writes, or live
-installation are separate authorization and acceptance gates. Do not perform
-them as an implicit part of a host-only issue fix.
+The last command must print `99197eff816d2696cc8760a4a1cd86cc4fe216b0`.
+The publication tree includes documentation above that frozen source; it does
+not claim an already-built binary was rebuilt from a new publication commit.
