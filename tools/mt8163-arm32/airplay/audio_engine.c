@@ -613,6 +613,10 @@ static int sendspin_write_and_account(struct sendspin_state *sp,
         return -1;
     }
 
+    /* The FIFO mask has no Sendspin source. Mark accepted source audio,
+     * excluding priming/keepalive padding and periods where the alarm mutes it. */
+    if (source_frames > 0u && !(activity_mask & PLAYBACK_BUS_ALARM))
+        activity_mask |= PLAYBACK_BUS_MEDIA;
     /* AEC reference is derived from the final mix, once per accepted period. */
     (void)le_aec_reference_publish(reference, samples, period_frames,
                                    OUTPUT_CHANNELS, activity_mask);

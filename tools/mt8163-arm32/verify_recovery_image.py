@@ -58,7 +58,7 @@ WIRELESS_TOOLS_VERSION = "30~pre9"
 WIRELESS_TOOLS_SOURCE_SHA256 = "abd9c5c98abf1fdd11892ac2f8a56737544fe101e1be27c6241a564948f34c63"
 WIRELESS_TOOLS_SOURCE_URL = "https://archive.ubuntu.com/ubuntu/pool/main/w/wireless-tools/wireless-tools_30~pre9.orig.tar.gz"
 
-INIT_SHA256 = "38e4321375bb1b09375b85d9689e1511988677084366a40d4304136ee7abe16e"
+INIT_SHA256 = "e1c91b7c8760aa9eb124bc01109bfbad046cedcf7d5b0b815de5e64d1c095315"
 BOOT_ENVELOPE_SHA256 = "e83e11b9ef8338cf3262144870790d2b005df16baf4d119849658943e64bbf7a"
 OVERLAY_FILES = {
     "default.prop": 0o644,
@@ -166,6 +166,7 @@ UI_BINARY_NAMES = {
     "usr/local/sbin/libreecho-btd",
     "usr/local/sbin/libreecho-airplayd",
     "usr/local/sbin/libreecho-esphomed",
+    "usr/local/sbin/libreecho-intercomd",
     "usr/local/sbin/libreecho-sttd-wyoming",
     "usr/local/sbin/libreecho-ttsd-wyoming",
     "usr/local/sbin/libreecho-mdnsd",
@@ -189,8 +190,13 @@ UI_INIT_NAMES = {
     "etc/init.d/libreecho-sttd.init",
     "etc/init.d/libreecho-agentd.init",
     "etc/init.d/libreecho-esphomed.init",
+    "etc/init.d/libreecho-intercomd.init",
 }
-UI_FIXED_NAMES = UI_BINARY_NAMES | UI_INIT_NAMES | {
+UI_INTERCOM_WEB_NAMES = {
+    "usr/local/share/libreecho/web/js/intercom-ui.js",
+    "usr/local/share/libreecho/web/js/intercom-worklet.js",
+}
+UI_FIXED_NAMES = UI_BINARY_NAMES | UI_INIT_NAMES | UI_INTERCOM_WEB_NAMES | {
     "etc/libreecho/web-config.json",
     "etc/libreecho/airplay2.conf",
     "etc/libreecho/ntp.conf",
@@ -836,6 +842,9 @@ def validate_ui(entries: dict[str, Entry], manifest: dict[str, object],
                 expected_commit: str | None,
                 expected_diff_sha256: str | None) -> bool:
     for name, entry in entries.items():
+        if name in {"etc/libreecho/web-config.json.intercom",
+                    "data/libreecho/config/web-config.json.intercom"}:
+            fail(f"forbidden device-local intercom permission file: {name}")
         if ((name.endswith(".service") and b"_wyoming._tcp" in entry.data) or
                 name.startswith("usr/local/sbin/libreecho-wyomingd") or
                 name.startswith("etc/init.d/libreecho-wyomingd") or
@@ -920,6 +929,8 @@ def validate_ui(entries: dict[str, Entry], manifest: dict[str, object],
             fail("UI users file is empty")
         if name.startswith("usr/local/share/libreecho/sounds/") and not member.data:
             fail(f"UI action sound is empty: {name}")
+        if name in UI_INTERCOM_WEB_NAMES and not member.data:
+            fail(f"UI intercom web asset is empty: {name}")
         if name in UI_BINARY_NAMES:
             if name in {
                     "usr/local/sbin/libreecho-sttd-wyoming",

@@ -61,7 +61,7 @@ EVT_PADDED_SIZE = 0x10000
 ZIMAGE_MAGIC = 0x016F2818
 
 STOCK_EVT_SHA256 = "f44630ba28f503dd7503bc7cffa2ee96a319acf2f58f1456bb6f5ff23d57dee1"
-RECOVERY_INIT_SHA256 = "38e4321375bb1b09375b85d9689e1511988677084366a40d4304136ee7abe16e"
+RECOVERY_INIT_SHA256 = "e1c91b7c8760aa9eb124bc01109bfbad046cedcf7d5b0b815de5e64d1c095315"
 BOOT_ENVELOPE_SHA256 = "e83e11b9ef8338cf3262144870790d2b005df16baf4d119849658943e64bbf7a"
 PROVEN_ZIMAGE_SHA256 = "4e144959eb0ffaee91b37d05a0f871863a74f4abb1bad0474c2fec358d5176a6"
 PROVEN_SYSTEM_MAP_SHA256 = "527292112edd28e8facf2998eefe2224b08a05b193efc73634cd998e9113ba95"
@@ -1418,7 +1418,7 @@ def add_ui_bundle(stage: Path, bundle: Path, source: Path,
         "libreecho-timed", "libreecho-timerd", "libreecho-watchdogd",
         "libreecho-audiod", "libreecho-micd", "libreecho-ledd", "libreecho-buttond",
         "libreecho-radiod", "libreecho-btd", "libreecho-airplayd",
-        "libreecho-esphomed", "libreecho-mdnsd",
+        "libreecho-esphomed", "libreecho-intercomd", "libreecho-mdnsd",
         "libreecho-sttd-wyoming", "libreecho-ttsd-wyoming",
     }
     allowed_inits = (allowed_binaries - {"libreecho-mdnsd", "libreecho-sttd-wyoming",
@@ -1437,6 +1437,13 @@ def add_ui_bundle(stage: Path, bundle: Path, source: Path,
     for relative in bundled_files:
         if relative not in allowed_fixed and not relative.startswith("share/libreecho/web/"):
             raise SystemExit(f"ERROR: UI bundle has unexpected/forbidden file: {relative}")
+    for asset in ("intercom-ui.js", "intercom-worklet.js"):
+        relative = f"share/libreecho/web/js/{asset}"
+        if relative not in bundled_files:
+            raise SystemExit(f"ERROR: UI bundle is missing intercom web asset: {asset}")
+        asset_path = pinned_source(bundle, relative, f"intercom web asset {asset}")
+        if not read(asset_path):
+            raise SystemExit(f"ERROR: UI bundle intercom web asset is empty: {asset}")
     validate_ui_startup_contract(bundle)
 
     files: dict[str, object] = {}
@@ -1475,7 +1482,7 @@ def add_ui_bundle(stage: Path, bundle: Path, source: Path,
         "libreecho-timed", "libreecho-timerd", "libreecho-watchdogd",
         "libreecho-audiod", "libreecho-micd",
         "libreecho-ledd", "libreecho-buttond", "libreecho-radiod", "libreecho-btd",
-        "libreecho-airplayd", "libreecho-esphomed",
+        "libreecho-airplayd", "libreecho-esphomed", "libreecho-intercomd",
         "libreecho-sttd-wyoming", "libreecho-ttsd-wyoming",
         # The shared discovery supervisor: the 0.14 mDNS re-arch moved
         # responder ownership here, and without the binary the init falls back
@@ -1492,7 +1499,7 @@ def add_ui_bundle(stage: Path, bundle: Path, source: Path,
         "libreecho-micd.init", "libreecho-ledd.init", "libreecho-buttond.init",
         "libreecho-radiod.init", "libreecho-btd.init",
         "libreecho-airplayd.init", "libreecho-ttsd.init", "libreecho-waked.init",
-        "libreecho-sttd.init", "libreecho-agentd.init", "libreecho-esphomed.init",
+        "libreecho-sttd.init", "libreecho-agentd.init", "libreecho-esphomed.init", "libreecho-intercomd.init",
     ):
         copy_file(f"etc/init.d/{script}", f"etc/init.d/{script}", 0o755)
     copy_file("etc/libreecho/web-config.json", "etc/libreecho/web-config.json", 0o600)

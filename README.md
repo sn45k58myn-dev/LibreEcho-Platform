@@ -12,19 +12,13 @@ LibreEcho release and is not endorsed by upstream or Amazon. Read
 [AI_DISCLOSURE.md](AI_DISCLOSURE.md) and the full [DISCLAIMER.md](DISCLAIMER.md).
 **There is no promised repair, recovery, unbricking, replacement or support service.**
 
-## Source and hardware status
+## Echo 2 release status
 
-The frozen personal `0.15.0` candidate for the full-size Echo 2nd Generation
-(`radar_puffin`) passed local source tests, cross-compilation, image/signature
-verification and complete installer preparation. It remains
-**`PREPARED_NOT_FLASHED`: no physical boot, audio, microphone or update acceptance.**
-The candidate's original build input for this component is `99197eff816d2696cc8760a4a1cd86cc4fe216b0`.
-Publication documentation is added above those frozen inputs; an existing binary
-is not relabelled as a build of the publication commit.
+LibreEcho 0.16.8 includes the phone intercom echo fix for the full-size Echo 2nd Generation (2017, Radar/Puffin). On one Echo 2, a signed OTA installed and a caller reported less echo on an iPhone. A fresh installation on another unit still needs a hardware test.
 
-Echo Dot 2 support is inherited from upstream and has not been qualified in this
-fork. **Echo 3, Echo Studio and additional boards are research targets only:
-unsupported, with no compatible image or enabled port provided here.**
+This platform revision marks active Sendspin playback in the audio reference used for echo cancellation. For the matching voice-service and intercom code, installer checks and hardware results, read the [0.16.8 release record](https://github.com/sn45k58myn-dev/LibreEcho/releases/tag/echo2-source-v0.16.8). The [exact platform source used in the build](https://github.com/sn45k58myn-dev/LibreEcho-Platform/commit/160dd390362a1e322c8799b4be0ac3dd21f982a6) is available separately from the publication documentation.
+
+See the [hardware roadmap](https://github.com/sn45k58myn-dev/LibreEcho/blob/docs/community-publication/docs/community/ROADMAP.md) for the Echo Dot 2, Echo 3 and Echo Studio.
 
 ## Four-repository layout
 
@@ -70,7 +64,7 @@ can stop a just-starting radio child before its parent-death guard is armed when
 pause happens before the first PCM. This fork does not claim that race is fixed.
 See the project build-status page for the evidence limits and next gates.
 
-## Exact tested source history
+## Archived 0.15.0 source history
 
 The [source-history bundle](docs/community/history/tested-source.bundle) preserves
 the original local source commits and authorship on top of the upstream baseline.
