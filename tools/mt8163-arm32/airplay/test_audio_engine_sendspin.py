@@ -1124,6 +1124,17 @@ int main(int argc, char **argv)
     {
         int32_t mixed;
         uint32_t gen;
+        static const unsigned int bus_masks[] = {
+            PLAYBACK_BUS_SYSTEM, PLAYBACK_BUS_ALARM
+        };
+        static const unsigned int expected_masks[] = {
+            PLAYBACK_BUS_SYSTEM | PLAYBACK_BUS_MEDIA, PLAYBACK_BUS_ALARM
+        };
+        struct le_aec_reference_packet packet;
+        char root[sizeof(reference.address.sun_path)];
+        const char *separator = strrchr(argv[1], '/');
+        int ref_fd;
+        size_t index;
 
         sources[SOURCE_SYSTEM].samples =
             (int16_t *)calloc(1, period_bytes);
@@ -1152,23 +1163,46 @@ int main(int argc, char **argv)
         /* Even when muted, the period still commits the source time: mute is
          * an output-gain decision, not a reason to stall the source cursor.
          * Open a fresh generation so a FINISHed predecessor cannot interfere. */
+        check(separator && (size_t)(separator - argv[1]) < sizeof(root),
+              "reference fixture root does not fit the socket path");
+        if (!separator || (size_t)(separator - argv[1]) >= sizeof(root))
+            return 1;
+        (void)snprintf(root, sizeof(root), "%.*s",
+                       (int)(separator - argv[1]), argv[1]);
+        check(le_aec_reference_init(&reference, root) == 0,
+              "priority reference sender init failed");
+        ref_fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+        check(ref_fd >= 0 && bind(ref_fd, (struct sockaddr *)&reference.address,
+                                  reference.address_size) == 0,
+              "priority reference receiver bind failed");
         open_generation(&g_sendspin, argv[1], g_sendspin.generation + 1u);
         gen = g_sendspin.generation;
-        check(queue_source(sink, epoch, gen, 0u, 0u, 256u, 444) ==
-              LE_AUDIO_SINK_OK, "muted source submit rejected");
         /* Partial-period accounting is a mid-stream (post-start) case; the
          * start gate has its own scenario. */
         g_sendspin.source_started = 1;
-        (void)sendspin_stage(&g_sendspin);
-        reset_fake_pcm();
-        check(sendspin_write_and_account(&g_sendspin, pcm, output, PERIOD_SIZE,
-                                         g_sendspin.stage_frames,
-                                         g_sendspin.first_frame, &reference,
-                                         0u) == 0,
-              "muted-ducked period did not complete");
-        check(le_audio_sink_get_progress(sink, &sp_progress) == LE_AUDIO_SINK_OK &&
-              sp_progress.submitted_frames == 256u,
-              "muted-ducked period did not advance the source cursor");
+        for (index = 0; index < sizeof(bus_masks) / sizeof(bus_masks[0]); ++index) {
+            check(queue_source(sink, epoch, gen, index * 256u, (uint32_t)index,
+                               256u, 444) == LE_AUDIO_SINK_OK,
+                  "muted-ducked source submit rejected");
+            (void)sendspin_stage(&g_sendspin);
+            reset_fake_pcm();
+            check(sendspin_write_and_account(&g_sendspin, pcm, output, PERIOD_SIZE,
+                                             g_sendspin.stage_frames,
+                                             g_sendspin.first_frame, &reference,
+                                             bus_masks[index]) == 0,
+                  "muted-ducked period did not complete");
+            check(le_audio_sink_get_progress(sink, &sp_progress) == LE_AUDIO_SINK_OK &&
+                  sp_progress.submitted_frames == (index + 1u) * 256u,
+                  "muted-ducked period did not advance the source cursor");
+            check(recv(ref_fd, &packet, sizeof(packet), MSG_DONTWAIT) ==
+                  (ssize_t)sizeof(packet) &&
+                  packet.header.activity_mask == expected_masks[index] &&
+                  packet.samples[0] == output[0],
+                  "priority reference changed PCM or reported wrong AEC activity");
+        }
+        if (ref_fd >= 0)
+            close(ref_fd);
+        le_aec_reference_close(&reference);
     }
 
     /* ---- cleanup: teardown is idempotent and order-safe ---- */
@@ -2293,8 +2327,8 @@ static int aec_receiver_open(const char *root)
     return fd;
 }
 
-/* Look for one published AEC reference packet carrying at least `bits`
- * (0 = any).  Proves the real le_aec_reference_publish path ran in the loop. */
+/* Look for a reference packet carrying at least `bits`. For a silent priming
+ * period, zero means the first packet must have no activity bits. */
 static int aec_receiver_check(int fd, unsigned int bits)
 {
     int i;
@@ -2316,6 +2350,8 @@ static int aec_receiver_check(int fd, unsigned int bits)
             packet.header.frames != PERIOD_SIZE ||
             packet.header.channels != 1u)
             return -1;
+        if (bits == 0u)
+            return packet.header.activity_mask == 0u ? 0 : -1;
         if ((packet.header.activity_mask & bits) == bits)
             return 0;
     }
@@ -2501,7 +2537,7 @@ static void scen_prime(const char *base)
     char root[600];
     char sock[700];
     pid_t pid;
-    int ev, ctl, fd, i;
+    int ev, ctl, fd, i, aec;
     uint32_t epoch = 0, status = 0;
     uint8_t prog[64];
     uint32_t proglen = 0;
@@ -2509,7 +2545,10 @@ static void scen_prime(const char *base)
 
     make_root(base, g_scen_names[SCEN_PRIME], root, sizeof(root));
     (void)snprintf(sock, sizeof(sock), "%s/sendspin.sock", root);
+    aec = aec_receiver_open(root);
     if (spawn(root, SCEN_PRIME, &pid, &ev, &ctl) != 0) {
+        if (aec >= 0)
+            close(aec);
         check(0, "prime: spawn failed");
         return;
     }
@@ -2528,6 +2567,10 @@ static void scen_prime(const char *base)
         close(fd);
     }
     (void)finish_child(pid, ev, ctl);
+    check(aec >= 0 && aec_receiver_check(aec, 0u) == 0,
+          "prime: the first AEC reference was missing or marked active");
+    if (aec >= 0)
+        close(aec);
     check(load_log(root) == 0, "prime: engine log missing");
     check(g_log.audit_denied == 0u,
           "prime: the loop reached an external /sys /dev /run /data path");
@@ -2578,14 +2621,17 @@ static void scen_finish(const char *base)
     char root[600];
     char sock[700];
     pid_t pid;
-    int ev, ctl, fd;
+    int ev, ctl, fd, aec;
     uint32_t epoch = 0, status = 0;
     uint8_t prog[64];
     uint32_t proglen = 0;
 
     make_root(base, g_scen_names[SCEN_FINISH], root, sizeof(root));
     (void)snprintf(sock, sizeof(sock), "%s/sendspin.sock", root);
+    aec = aec_receiver_open(root);
     if (spawn(root, SCEN_FINISH, &pid, &ev, &ctl) != 0) {
+        if (aec >= 0)
+            close(aec);
         check(0, "finish: spawn failed");
         return;
     }
@@ -2605,6 +2651,10 @@ static void scen_finish(const char *base)
         close(fd);
     }
     (void)finish_child(pid, ev, ctl);
+    check(aec >= 0 && aec_receiver_check(aec, PLAYBACK_BUS_MEDIA) == 0,
+          "finish: the Sendspin tail did not mark its AEC reference as media");
+    if (aec >= 0)
+        close(aec);
     check(load_log(root) == 0, "finish: engine log missing");
     check(g_log.audit_denied == 0u,
           "finish: the loop reached an external /sys /dev /run /data path");
